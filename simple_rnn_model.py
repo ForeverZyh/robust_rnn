@@ -8,7 +8,7 @@ from keras.backend import squeeze
 import keras
 import numpy as np
 
-from rnn_verification.Cells import AIGRUCell, Zonotope
+from rnn_verification.Cells import AIGRUCell, Zonotope, DPAIGRUCell
 from rnn_verification.AI import AI
 
 
@@ -59,14 +59,15 @@ class SimpleRNNModel1:
         for param in all_params:
             assert param in self.hyperparameters, param
 
-    def verify_swap(self, delta=1, fi=-1, ai="Point"):
+    def verify_swap(self, delta=1, fi=-1, ai="Point", dp=True):
         look_up_c = self.embed(self.c)
-        kernel, recurrent_kernel, bias = self.gru.get_weights()
-        kernel = tf.constant(kernel, name="const_kernel")
-        recurrent_kernel = tf.constant(recurrent_kernel)
+        kernel, recurrent_kernel, bias = self.gru.weights
+        # kernel = tf.constant(kernel, name="const_kernel")
+        # recurrent_kernel = tf.constant(recurrent_kernel)
         units = self.hyperparameters["conv_layer2_nfilters"]
         aigru = AIGRUCell(units, self.hyperparameters["D"], recurrent_initializer=recurrent_kernel,
                           kernel_initializer=kernel, bias_initializer=bias)
+        domain = None
         if ai == "Box":
             maxpool = MaxPooling1D(pool_size=delta * 2 + 1, strides=1, padding='same')
             if fi != -1:
@@ -80,15 +81,32 @@ class SimpleRNNModel1:
                 box_domain = Lambda(
                     lambda x: K.concatenate([(maxpool(x) - maxpool(-x)) / 2, (maxpool(x) + maxpool(-x)) / 2],
                                             axis=-1))(look_up_c)
-            self.h_t_ai = RNN(aigru, return_sequences=False)(box_domain)
+            domain = box_domain
         elif ai == "Point":
             point_domain = Lambda(lambda x: K.concatenate([x, K.zeros_like(x)], axis=-1))(look_up_c)
             self.h_t_ai = RNN(aigru, return_sequences=False)(point_domain)
         elif ai == "Zonotope":
             zonotope_domain = Zonotope(delta, fi)(look_up_c)
-            self.h_t_ai = RNN(aigru, return_sequences=False)(zonotope_domain)
+            domain = zonotope_domain
         else:
             raise NotImplementedError()
+
+        if ai != "Point":
+            if dp:
+                point_domain = Lambda(lambda x: K.concatenate([x, K.zeros_like(x)], axis=-1))(look_up_c)
+                rnn_layer = RNN(aigru, return_sequences=True)
+                h_t_ai_s = rnn_layer(point_domain)
+                h_t_ai_without_dp = rnn_layer(domain)
+                dpaigru = DPAIGRUCell(units, self.hyperparameters["D"], recurrent_initializer=recurrent_kernel,
+                                      kernel_initializer=kernel, bias_initializer=bias)
+                for i in range(delta * 2):
+                    h_t_ai_s = Lambda(lambda x: K.concatenate(
+                        [K.concatenate([K.zeros_like(x[:, :1, :]), x[:, 1:, :]], axis=1), h_t_ai_without_dp,
+                         point_domain, domain], axis=-1))(h_t_ai_s)
+                    h_t_ai_s = RNN(dpaigru, return_sequences=(i != 2 * delta - 1))(h_t_ai_s)
+                self.h_t_ai = h_t_ai_s
+            else:
+                self.h_t_ai = RNN(aigru, return_sequences=False)(domain)
 
         weights, bias = self.fc1.weights
         to_AI = lambda d: (lambda x: AI(x[:, :d], x[:, d:d * 2], x[:, d * 2:], False))
