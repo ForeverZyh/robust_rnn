@@ -101,7 +101,7 @@ class SimpleRNNModel1:
                                       kernel_initializer=kernel, bias_initializer=bias)
                 for i in range(delta * 2):
                     h_t_ai_s = Lambda(lambda x: K.concatenate(
-                        [K.concatenate([K.zeros_like(x[:, :1, :]), x[:, 1:, :]], axis=1), h_t_ai_without_dp,
+                        [K.concatenate([K.zeros_like(x[:, :1, :]), x[:, :-1, :]], axis=1), h_t_ai_without_dp,
                          point_domain, domain], axis=-1))(h_t_ai_s)
                     h_t_ai_s = RNN(dpaigru, return_sequences=(i != 2 * delta - 1))(h_t_ai_s)
                 self.h_t_ai = h_t_ai_s
