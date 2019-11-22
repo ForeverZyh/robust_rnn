@@ -498,6 +498,8 @@ class DPAIGRUCell(Layer):
         h_without_dp_upper = h_without_dp_c + h_without_dp_r
         lower = K.maximum(K.minimum(h1_lower, h2_lower), h_without_dp_lower)
         upper = K.minimum(K.maximum(h1_upper, h2_upper), h_without_dp_upper)
+        # lower = K.minimum(h1_lower, h2_lower)
+        # upper = K.maximum(h1_upper, h2_upper)
         h_state = K.concatenate([(lower + upper) / 2, (upper - lower) / 2], axis=-1)
         return h_state, [h_state]
 
@@ -564,7 +566,43 @@ class Zonotope(keras.layers.Layer):
         return K.concatenate(rets, axis=1)
 
     def compute_output_shape(self, input_shape):
-        return (input_shape[0], input_shape[1], input_shape[2] * 2 * self.delta)
+        return (input_shape[0], input_shape[1], input_shape[2] * (2 * self.delta + 2))
+
+
+class Points(keras.layers.Layer):
+    def __init__(self, delta, fi, **kwargs):
+        super(Points, self).__init__(**kwargs)
+        self.delta = delta
+        self.fi = fi
+
+    def build(self, input_shape):
+        # Create a trainable weight variable for this layer.
+        super(Points, self).build(input_shape)  # Be sure to call this at the end
+
+    def call(self, x, **kwargs):
+        # x has (batch, length, dim)
+        delta = self.delta
+        xshape = x.shape
+        r = K.zeros_like(x[:, 0, ])
+        rets = []
+        for i in range(xshape[1]):
+            if self.fi == -1 or i < self.fi:
+                errors = []
+                cnt = 0
+                for j in range(-delta, delta + 1):
+                    if 0 <= i + j < xshape[1] and j != 0:
+                        errors.append(x[:, i + j, :])
+                        cnt += 1
+                for _ in range(delta * 2 + 1 - cnt):
+                    errors.append(x[:, i, :])
+                rets.append(K.expand_dims(K.concatenate(errors, axis=-1), axis=1))
+            else:
+                rets.append(
+                    K.expand_dims(K.concatenate([x[:, i, :] for _ in range(delta * 2 + 1)], axis=-1), axis=1))
+        return K.concatenate(rets, axis=1)
+
+    def compute_output_shape(self, input_shape):
+        return (input_shape[0], input_shape[1], input_shape[2] * (2 * self.delta + 1))
 
 
 def _generate_dropout_mask(ones, rate, training=None, count=1):

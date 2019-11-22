@@ -94,9 +94,8 @@ class SimpleRNNModel1:
         if ai != "Point":
             if dp:
                 point_domain = Lambda(lambda x: K.concatenate([x, K.zeros_like(x)], axis=-1))(look_up_c)
-                rnn_layer = RNN(aigru, return_sequences=True)
-                h_t_ai_s = rnn_layer(point_domain)
-                h_t_ai_without_dp = rnn_layer(domain)
+                h_t_ai_s = RNN(aigru, return_sequences=True)(point_domain)
+                h_t_ai_without_dp = RNN(aigru, return_sequences=True)(domain)
                 dpaigru = DPAIGRUCell(units, self.hyperparameters["D"], recurrent_initializer=recurrent_kernel,
                                       kernel_initializer=kernel, bias_initializer=bias)
                 for i in range(delta * 2):
@@ -110,8 +109,17 @@ class SimpleRNNModel1:
 
         weights, bias = self.fc1.weights
         to_AI = lambda d: (lambda x: AI(x[:, :d], x[:, d:d * 2], x[:, d * 2:], False))
-        attention = Lambda(lambda x: to_AI(units)(x).matmul(weights).bias_add(bias).to_state())(self.h_t_ai)
-        self.verify_model = Model(inputs=self.c, outputs=attention)
+        self.out = Lambda(lambda x: to_AI(units)(x).matmul(weights).bias_add(bias).to_state())(self.h_t_ai)
+        self.verify_model = Model(inputs=self.c, outputs=self.out)
+
+    def robust_train(self):
+        self.y = Input(shape=(self.nb_classes,), dtype='int32', name="input")
+        self.logits_symbolic = Lambda(
+            lambda x: K.switch(K.greater(x, 0), self.out[:, :self.nb_classes] - self.out[:, -self.nb_classes:],
+                               self.out[:, :self.nb_classes] + self.out[:, -self.nb_classes:]))(self.y)
+        logits_combine = Lambda(lambda x: x * 0.01 + self.logits)(self.logits_symbolic)
+        self.robust_train_model = Model(inputs=[self.c, self.y], outputs=logits_combine)
+        self.robust_train_model.compile(optimizer='RMSprop', loss='categorical_crossentropy', metrics=['accuracy'])
 
 
 class SimpleRNNModel:
