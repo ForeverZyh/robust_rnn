@@ -1,8 +1,8 @@
 import tensorflow as tf
 import numpy as np
 
-from rnn_verification.simple_rnn_model import SimpleRNNModel, params, SimpleRNNModel1
-from logic_formula.utils import get_one_hot
+from simple_rnn_model import SimpleRNNModel, params, SimpleRNNModel1
+from utils import get_one_hot
 
 training_X = np.load("./AG/X_train.npy")
 training_y = np.load("./AG/y_train.npy")

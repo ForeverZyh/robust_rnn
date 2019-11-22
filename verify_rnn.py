@@ -3,8 +3,8 @@ import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior()
 import numpy as np
 
-from rnn_verification.simple_rnn_model import params, SimpleRNNModel, SimpleRNNModel1
-from logic_formula.utils import get_one_hot
+from simple_rnn_model import params, SimpleRNNModel, SimpleRNNModel1
+from utils import get_one_hot
 
 nb_classes = 4
 # model = SimpleRNNModel(params, 60, nb_classes)

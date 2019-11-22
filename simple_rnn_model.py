@@ -8,8 +8,8 @@ from keras.backend import squeeze
 import keras
 import numpy as np
 
-from rnn_verification.Cells import AIGRUCell, Zonotope, DPAIGRUCell
-from rnn_verification.AI import AI
+from Cells import AIGRUCell, Zonotope, DPAIGRUCell
+from AI import AI
 
 
 class SimpleRNNModel1:

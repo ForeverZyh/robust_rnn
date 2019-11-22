@@ -11,7 +11,7 @@ from keras.engine.base_layer import InputSpec
 from keras.utils.generic_utils import has_arg
 from keras.utils.generic_utils import to_list
 import numpy as np
-from rnn_verification.AI import AI
+from AI import AI
 import tensorflow.compat.v1 as tf
 
 tf.disable_v2_behavior()
