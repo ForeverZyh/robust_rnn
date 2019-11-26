@@ -4,7 +4,7 @@ import numpy as np
 import heapq
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-import kdtree
+from copkmeans.cop_kmeans import cop_kmeans
 
 
 def cuboid_data(o, size=(1, 1, 1)):
@@ -74,136 +74,47 @@ class Disjoint_Domain:
             return
 
         # discard similar points and boxes
-        self.points.eliminate_similar()
-        self.boxes.eliminate_similar()
-        for b in self.boxes:
-            self.points.eliminate_within_box(b)
+        # self.points.eliminate_similar()
+        # self.boxes.eliminate_similar()
+        # for b in self.boxes:
+        #     self.points.eliminate_within_box(b)
 
         # merge them
         t = len(self.boxes) + len(self.points) - self.budget
         if t <= 0:
             return
+        print(t)
 
-        # self.print()
-        heap = []
-        for i in range(len(self.points.points)):
-            for j in range(i + 1, len(self.points.points)):
-                cost = np.sum(np.log(np.abs(self.points.points[i] - self.points.points[j])))
-                heapq.heappush(heap, (cost, ("PP", i, j)))
+        input_points = []
+        for p in self.points:
+            input_points.append(p)
 
-            for j in range(len(self.boxes.boxes)):
-                cost = log_ex2(np.sum(np.log(
-                    2 * np.maximum(np.abs(self.boxes.boxes[j][0] - self.points.points[i]), self.boxes.boxes[j][1]))),
-                    np.sum(np.log(2 * self.boxes.boxes[j][1])))
-                # cost = np.sum(
-                #     np.maximum(np.abs(self.boxes.boxes[j][0] - self.points.points[i]) - self.boxes.boxes[j][1], 0))
-                heapq.heappush(heap, (cost, ("PB", i, j)))
+        must_link = []
+        for b in self.boxes:
+            input_points.append(b[0] - b[1])
+            input_points.append(b[0] + b[1])
+            must_link.append((len(input_points) - 2, len(input_points) - 1))
 
-        for i in range(len(self.boxes.boxes)):
-            for j in range(i + 1, len(self.boxes.boxes)):
-                t1 = (self.boxes.boxes[i][0] - self.boxes.boxes[i][1],
-                      self.boxes.boxes[j][0] - self.boxes.boxes[j][1])
-                t2 = (self.boxes.boxes[i][0] + self.boxes.boxes[i][1],
-                      self.boxes.boxes[j][0] + self.boxes.boxes[j][1])
-                lower = np.minimum(*t1)
-                upper = np.maximum(*t2)
-                inter_lower = np.maximum(*t1)
-                inter_upper = np.minimum(*t2)
-                a = np.sum(np.log(upper - lower))
-                b = np.sum(np.log(self.boxes.boxes[i][1] * 2))
-                c = np.sum(np.log(self.boxes.boxes[j][1] * 2))
-                if (np.any(inter_lower >= inter_upper)):
-                    # log_ex3
-                    cost = log_ex3(a, b, c)
-                else:
-                    d = np.sum(np.log(inter_upper - inter_lower))
-                    cost = log_ex4(a, b, c, d)
-                # cost = np.sum((upper - lower) / 2 - self.boxes.boxes[i][1] - self.boxes.boxes[j][1] + np.maximum(
-                #     inter_upper - inter_lower, 0) / 2)
-                # cost = np.sum((upper - lower) / 2 - self.boxes.boxes[i][1] - self.boxes.boxes[j][1])
-                heapq.heappush(heap, (cost, ("BB", i, j)))
+        clusters, centers = cop_kmeans(dataset=np.array(input_points), k=self.budget, ml=must_link, cl=[], max_iter=30)
 
-        delete_points = set()
-        delete_boxes = set()
-        print(t, len(self.points) + len(self.boxes))
-        ii = 0
-        while ii <= t:
-            _, top = heapq.heappop(heap)
-            if top[0] == "PP":
-                if top[1] in delete_points or top[2] in delete_points:
-                    continue
-                delete_points.add(top[1])
-                delete_points.add(top[2])
-                self.boxes.boxes.append([(self.points.points[top[1]] + self.points.points[top[2]]) / 2,
-                                         np.abs(self.points.points[top[1]] - self.points.points[top[2]]) / 2])
-            elif top[0] == "PB":
-                if top[1] in delete_points or top[2] in delete_boxes:
-                    continue
-                delete_points.add(top[1])
-                delete_boxes.add(top[2])
-                lower = np.minimum(self.boxes.boxes[top[2]][0] - self.boxes.boxes[top[2]][1],
-                                   self.points.points[top[1]])
-                upper = np.maximum(self.boxes.boxes[top[2]][0] + self.boxes.boxes[top[2]][1],
-                                   self.points.points[top[1]])
-                self.boxes.boxes.append([(lower + upper) / 2, (upper - lower) / 2])
-            elif top[0] == "BB":
-                if top[1] in delete_boxes or top[2] in delete_boxes:
-                    continue
-                delete_boxes.add(top[1])
-                delete_boxes.add(top[2])
-                lower = np.minimum(self.boxes.boxes[top[2]][0] - self.boxes.boxes[top[2]][1],
-                                   self.boxes.boxes[top[1]][0] - self.boxes.boxes[top[1]][1])
-                upper = np.maximum(self.boxes.boxes[top[2]][0] + self.boxes.boxes[top[2]][1],
-                                   self.boxes.boxes[top[1]][0] + self.boxes.boxes[top[1]][1])
-                self.boxes.boxes.append([(lower + upper) / 2, (upper - lower) / 2])
-            ii += 1
-            if ii == t:
-                break
-            for i in range(len(self.points.points)):
-                if i not in delete_points:
-                    # cost = np.sum(
-                    #     np.maximum(np.abs(self.boxes.boxes[-1][0] - self.points.points[i]) - self.boxes.boxes[-1][1],
-                    #                0))
-                    cost = log_ex2(np.sum(np.log(
-                        2 * np.maximum(np.abs(self.boxes.boxes[-1][0] - self.points.points[i]),
-                                       self.boxes.boxes[-1][1]))),
-                        np.sum(np.log(2 * self.boxes.boxes[-1][1])))
-                    heapq.heappush(heap, (cost, ("PB", i, len(self.boxes) - 1)))
-            for i in range(len(self.boxes.boxes) - 1):
-                if i not in delete_boxes:
-                    t1 = (self.boxes.boxes[i][0] - self.boxes.boxes[i][1],
-                          self.boxes.boxes[-1][0] - self.boxes.boxes[-1][1])
-                    t2 = (self.boxes.boxes[i][0] + self.boxes.boxes[i][1],
-                          self.boxes.boxes[-1][0] + self.boxes.boxes[-1][1])
-                    lower = np.minimum(*t1)
-                    upper = np.maximum(*t2)
-                    inter_lower = np.maximum(*t1)
-                    inter_upper = np.minimum(*t2)
-                    a = np.sum(np.log(upper - lower))
-                    b = np.sum(np.log(self.boxes.boxes[i][1] * 2))
-                    c = np.sum(np.log(self.boxes.boxes[-1][1] * 2))
-                    if (np.any(inter_lower >= inter_upper)):
-                        # log_ex3
-                        cost = log_ex3(a, b, c)
-                    else:
-                        d = np.sum(np.log(inter_upper - inter_lower))
-                        cost = log_ex4(a, b, c, d)
-                    # cost = np.sum((upper - lower) / 2 - self.boxes.boxes[i][1] - self.boxes.boxes[-1][1] + np.maximum(
-                    #     inter_upper - inter_lower, 0) / 2)
-                    # cost = np.sum((upper - lower) / 2 - self.boxes.boxes[i][1] - self.boxes.boxes[-1][1])
-                    heapq.heappush(heap, (cost, ("BB", i, len(self.boxes) - 1)))
-
-        self_points = self.points.points
         self.points.points = []
-        for i in range(len(self_points)):
-            if i not in delete_points:
-                self.points.points.append(self_points[i])
-
-        self_boxes = self.boxes.boxes
         self.boxes.boxes = []
-        for i in range(len(self_boxes)):
-            if i not in delete_boxes:
-                self.boxes.boxes.append(self_boxes[i])
+
+        lu = [None] * self.budget
+        for (i, c) in enumerate(clusters):
+            if lu[c] is None:
+                lu[c] = [input_points[i], input_points[i]]
+            else:
+                lu[c][0] = np.minimum(lu[c][0], input_points[i])
+                lu[c][1] = np.maximum(lu[c][1], input_points[i])
+
+        for x in lu:
+            if x is not None:
+                if np.sum(x[1] - x[0]) < 1e-7:
+                    self.points.points.append(x[0])
+                else:
+                    self.boxes.boxes.append([(x[1] + x[0]) / 2, (x[1] - x[0]) / 2])
+
         # self.print()
 
     def matmul(self, W):
