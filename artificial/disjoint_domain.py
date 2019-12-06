@@ -1,3 +1,5 @@
+import itertools
+
 from artificial.AIs import Points, Boxes
 import copy
 import numpy as np
@@ -5,6 +7,7 @@ import heapq
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from copkmeans.cop_kmeans import cop_kmeans
+import bisect
 
 
 def cuboid_data(o, size=(1, 1, 1)):
@@ -61,6 +64,57 @@ class Disjoint_Domain:
         self.boxes = Boxes([] if boxes is None else boxes)
         self.budget = budget
 
+    def get_volume(self):
+        if len(self.boxes.boxes) == 0:
+            return 0
+        px = []
+        vis = set()
+        for i in range(len(self.boxes.boxes[0][0])):
+            px.append([])
+            for b in self.boxes.boxes:
+                px[-1].append(b[0][i] - b[1][i])
+                px[-1].append(b[0][i] + b[1][i])
+            px[-1] = np.unique(px[-1])
+            px[-1].sort()
+
+        volume = 0
+        for b in self.boxes.boxes:
+            iter = ()
+            for i in range(len(b[0])):
+                lower = bisect.bisect_left(px[i], b[0][i] - b[1][i])
+                upper = bisect.bisect_left(px[i], b[0][i] + b[1][i])
+                iter += (range(lower, upper),)
+            for i in itertools.product(*iter):
+                if i not in vis:
+                    v = 1
+                    for j in range(len(i)):
+                        v *= px[j][i[j] + 1] - px[j][i[j]]
+                    volume += v
+                    vis.add(i)
+        return volume
+
+    def get_robust_label(self, nb_classes):
+        for i in range(nb_classes):  # two
+            flag = True
+            for p in self.points.points:
+                for j in range(len(p)):
+                    if i != j and p[j] >= p[i]:
+                        flag = False
+                        break
+                if not flag:
+                    break
+            if flag:
+                for b in self.boxes.boxes:
+                    for j in range(len(b[0])):
+                        if i != j and b[0][j] + b[1][j] >= b[0][i] - b[1][i]:
+                            flag = False
+                            break
+                    if not flag:
+                        break
+            if flag:
+                return i
+        return -1
+
     def __len__(self):
         return len(self.points) + len(self.boxes)
 
@@ -74,16 +128,16 @@ class Disjoint_Domain:
             return
 
         # discard similar points and boxes
-        # self.points.eliminate_similar()
-        # self.boxes.eliminate_similar()
-        # for b in self.boxes:
-        #     self.points.eliminate_within_box(b)
+        self.points.eliminate_similar()
+        self.boxes.eliminate_similar()
+        for b in self.boxes:
+            self.points.eliminate_within_box(b)
 
         # merge them
         t = len(self.boxes) + len(self.points) - self.budget
         if t <= 0:
             return
-        print(t)
+        # print(t)
 
         input_points = []
         for p in self.points:
@@ -95,7 +149,7 @@ class Disjoint_Domain:
             input_points.append(b[0] + b[1])
             must_link.append((len(input_points) - 2, len(input_points) - 1))
 
-        clusters, centers = cop_kmeans(dataset=np.array(input_points), k=self.budget, ml=must_link, cl=[], max_iter=30)
+        clusters, centers = cop_kmeans(dataset=np.array(input_points), k=self.budget, ml=must_link, cl=[], max_iter=100)
 
         self.points.points = []
         self.boxes.boxes = []

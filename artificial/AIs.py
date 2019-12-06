@@ -54,8 +54,8 @@ class Points:
         self_points = self.points
         self.points = []
         for i in range(len(self_points)):
-            if np.all(np.less_equal(b[0] - b[1], self_points[i])) and np.all(
-                    np.less_equal(self_points[i], b[0] + b[1])):
+            if not (np.all(np.less_equal(b[0] - b[1], self_points[i])) and np.all(
+                    np.less_equal(self_points[i], b[0] + b[1]))):
                 self.points.append(self_points[i])
 
     def cartesian_add(self, other):
