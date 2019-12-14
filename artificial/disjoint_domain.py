@@ -149,7 +149,7 @@ class Disjoint_Domain:
             input_points.append(b[0] + b[1])
             must_link.append((len(input_points) - 2, len(input_points) - 1))
 
-        clusters, centers = cop_kmeans(dataset=np.array(input_points), k=self.budget, ml=must_link, cl=[], max_iter=100)
+        clusters, centers = cop_kmeans(dataset=np.array(input_points), k=self.budget, ml=must_link, cl=[], max_iter=30)
 
         self.points.points = []
         self.boxes.boxes = []
@@ -202,6 +202,18 @@ class Disjoint_Domain:
         ret.boxes.extend(new_other_box)
         ret.check_balance()
         return ret
+
+    def minus(self):
+        ps = []
+        bs = []
+        for p in self.points.points:
+            ps.append(-p)
+        for b in self.boxes.boxes:
+            bs.append([-b[0], b[1]])
+        return Disjoint_Domain(self.budget, ps, bs)
+
+    def __sub__(self, other):
+        return self + other.minus()
 
     def activation(self, act):
         self.points.activation(act)

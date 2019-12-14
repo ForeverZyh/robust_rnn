@@ -4,23 +4,36 @@ tf.disable_v2_behavior()
 import numpy as np
 import copy
 import matplotlib.pyplot as plt
+import time
 
 from simple_rnn_model import params, SimpleRNNModel, SimpleRNNModel1
 from utils import get_one_hot
 from artificial.disjoint_domain import Disjoint_Domain
 from artificial.AIs import Points, Boxes
 
-nb_classes = 2
-# params["max_len"] = 100
-# model1 = SimpleRNNModel1(params, 30, nb_classes)
-# model1.model.load_weights("./models/rnn")
-params["max_len"] = 100
-params["D"] = 2
-params["conv_layer2_nfilters"] = 3
-model1 = SimpleRNNModel1(params, 30, nb_classes)
-model1.model.load_weights("./models/rnn_tiny")
-budget = 5
-sub_num = 2
+artificial = True
+if artificial:
+    nb_classes = 2
+    # params["max_len"] = 100
+    # model1 = SimpleRNNModel1(params, 30, nb_classes)
+    # model1.model.load_weights("./models/rnn")
+    params["max_len"] = 100
+    params["D"] = 2
+    params["conv_layer2_nfilters"] = 3
+    model1 = SimpleRNNModel1(params, 30, nb_classes)
+    model1.model.load_weights("./models/rnn_tiny")
+    budget = 5
+    sub_num = 2
+else:
+    nb_classes = 4
+    params["max_len"] = 300
+    params["D"] = 16
+    params["conv_layer2_nfilters"] = 32
+    model1 = SimpleRNNModel1(params, 60, nb_classes)
+    model1.model.load_weights("../models/rnn_small")
+    budget = 5
+    sub_num = 2
+
 units = params["conv_layer2_nfilters"]
 kernel, recurrent_kernel, bias = model1.gru.get_weights()
 
@@ -70,6 +83,12 @@ def GRU(h_tm1: Disjoint_Domain, input: Disjoint_Domain):
     # hh.activation(self.activation)
 
     # previous and candidate state mixed by update gate
+
+    # z.activation(sigmoid)
+    # z1 = z * h_tm1
+    # hh.activation(tanh)
+    # z2 = hh - z * hh
+    # z = z1 + z2
     z.GRU_merge(sigmoid, h_tm1, hh, tanh)
     return z
 
@@ -134,6 +153,7 @@ def get_valid_input():
 
         if cnt_a > 2 + 2:
             break
+        # break
     print(x)
     return x
 
@@ -147,6 +167,7 @@ embedding = model1.embed.get_weights()[0]
 #     # plt.text(x + 0.1, y + 0.1, chr(i + 96) if i > 0 else ' ', fontsize=9)
 # plt.show()
 
+begin_time = time.process_time()
 cnt = 0
 vol_sum = 0
 for _ in range(100):
@@ -168,7 +189,9 @@ for _ in range(100):
         modify_input[-1].check_balance()
     ans, vol = DP(initial_input, modify_input, 100)
     # ans, vol = Box_without_ed(initial_input, modify_input, 100)
+    print(ans, vol)
     cnt += 1 if ans == 1 else 0
     vol_sum += vol
 
 print(cnt / 100.0, vol_sum / 100.0)
+print(time.process_time() - begin_time)
